@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import AIPicksFeed from "./components/AIPicksFeed";
 import GameSelector from "./components/GameSelector";
 import OddsCard from "./components/OddsCard";
 import PropsCard from "./components/PropsCard";
@@ -161,6 +161,7 @@ export default function DashboardPage() {
           gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
           gap: "1.5rem",
           marginTop: "1.5rem",
+          <AIPicksFeed game={selectedGame} />
         }}
       >
         {/* Odds Card */}
