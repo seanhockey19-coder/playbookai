@@ -1,5 +1,6 @@
 "use client";
 
+import LineValueCard from "./components/LineValueCard";
 import { useEffect, useState } from "react";
 import GameSelector from "./components/GameSelector";
 import OddsCard from "./components/OddsCard";
@@ -139,7 +140,10 @@ export default function DashboardPage() {
 
         {/* Odds */}
         <OddsCard game={selectedGame} />
-
+        
+        {/* AI Line Value Scan */}
+         <LineValueCard game={selectedGame} />
+        
         {/* Props */}
         <PropsCard game={selectedGame} propsData={propsData} loading={propsLoading} />
 
