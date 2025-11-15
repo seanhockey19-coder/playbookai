@@ -1,31 +1,197 @@
 "use client";
 
-import { useState } from "react";
-import ParlayLegSelector from "./ParlayLegSelector";
-import ParlaySummary from "./ParlaySummary";
+import { useState, useEffect } from "react";
+import type { SimplifiedGame } from "../../api/nfl/odds/route";
 
-export default function ParlayBuilder({ games }: { games: any[] }) {
-  const [legs, setLegs] = useState<
-    { label: string; odds: number; valueGrade?: string }[]
-  >([]);
+// Convert American → Decimal
+function americanToDecimal(odds: number): number {
+  if (odds >= 100) return 1 + odds / 100;
+  return 1 + 100 / Math.abs(odds);
+}
 
-  const addLeg = (leg: { label: string; odds: number; valueGrade?: string }) => {
-    if (leg.odds == null) return;
-    setLegs((prev) => [...prev, leg]);
-  };
+// Convert Decimal → American
+function decimalToAmerican(decimal: number): number {
+  if (decimal <= 1) return 0;
+  if (decimal >= 2) return Math.round((decimal - 1) * 100);
+  return Math.round(-100 / (decimal - 1));
+}
 
-  const removeLeg = (index: number) => {
-    setLegs((prev) => prev.filter((_, i) => i !== index));
-  };
+// Implied probability from American odds
+function impliedProb(odds: number) {
+  if (odds >= 0) return 100 / (odds + 100);
+  return Math.abs(odds) / (Math.abs(odds) + 100);
+}
 
-  const clearLegs = () => {
+// Value Score (0–100)
+function computeValueScore(odds: number) {
+  const imp = impliedProb(odds);
+  return Math.round((imp * 100 + (1 - imp) * 40) / 2); // simple balanced value model
+}
+
+interface Props {
+  game?: SimplifiedGame;
+}
+
+export default function ParlayBuilder({ game }: Props) {
+  const [legs, setLegs] = useState<any[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    // Reset whenever user switches to another game
     setLegs([]);
+  }, [game?.id]);
+
+  if (!game) {
+    return (
+      <div style={card}>
+        <h2>Parlay Builder</h2>
+        <p>No game selected.</p>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------
+  // Build available markets for the selected game
+  // ---------------------------------------------------------
+  const markets: any[] = [];
+
+  // Moneyline (h2h)
+  if (game.h2h?.outcomes) {
+    game.h2h.outcomes.forEach((o) => {
+      markets.push({
+        id: `ML-${o.name}`,
+        label: `${o.name} ML`,
+        odds: o.price,
+        type: "moneyline",
+        team: o.name,
+      });
+    });
+  }
+
+  // Spread
+  if (game.spreads?.outcomes) {
+    game.spreads.outcomes.forEach((o) => {
+      markets.push({
+        id: `SPread-${o.name}`,
+        label: `${o.name} ${o.point > 0 ? "+" : ""}${o.point}`,
+        odds: o.price,
+        type: "spread",
+        team: o.name,
+        point: o.point,
+      });
+    });
+  }
+
+  // Totals
+  if (game.totals?.outcomes) {
+    game.totals.outcomes.forEach((o) => {
+      markets.push({
+        id: `Total-${o.name}`,
+        label: `Total ${o.name} ${game.totals.outcomes[0].point}`,
+        odds: o.price,
+        type: "total",
+        point: game.totals.outcomes[0].point,
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Toggle leg selection
+  // ---------------------------------------------------------
+  const toggleLeg = (m: any) => {
+    const exists = legs.find((l) => l.id === m.id);
+    if (exists) {
+      setLegs((prev) => prev.filter((l) => l.id !== m.id));
+      return;
+    }
+    setLegs((prev) => [...prev, m]);
+  };
+
+  // ---------------------------------------------------------
+  // Combined Parlay Odds
+  // ---------------------------------------------------------
+  const combinedAmerican = () => {
+    if (legs.length === 0) return null;
+    const decimals = legs.map((l) => americanToDecimal(l.odds));
+    const combo = decimals.reduce((acc, d) => acc * d, 1);
+    return decimalToAmerican(combo);
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <ParlayLegSelector games={games} onAdd={addLeg} />
-      <ParlaySummary legs={legs} onRemove={removeLeg} onClear={clearLegs} />
+    <div style={card}>
+      <h2>Single-Game Parlay Builder</h2>
+      <p style={{ marginBottom: "0.6rem", opacity: 0.8 }}>
+        {game.awayTeam} @ {game.homeTeam}
+      </p>
+
+      {/* Combined Odds */}
+      {legs.length > 0 && (
+        <div style={{ marginBottom: "1rem" }}>
+          <strong>Combined Odds:</strong>{" "}
+          {combinedAmerican() ? combinedAmerican() : "--"}
+          <br />
+          <span style={{ fontSize: "0.8rem", opacity: 0.7 }}>
+            Legs: {legs.length}
+          </span>
+        </div>
+      )}
+
+      {/* Market List */}
+      <div style={{ maxHeight: "260px", overflowY: "auto" }}>
+        {markets.map((m) => {
+          const selected = legs.some((l) => l.id === m.id);
+
+          const valScore = computeValueScore(m.odds);
+
+          return (
+            <div key={m.id} style={marketBox}>
+              <div>
+                <strong>{m.label}</strong>
+                <br />
+                Odds: <span style={{ color: "#0ff" }}>{m.odds}</span>
+                <br />
+                Value Score: <span>{valScore}/100</span>
+              </div>
+
+              <button
+                onClick={() => toggleLeg(m)}
+                style={{
+                  background: selected ? "#ff0" : "#0ff",
+                  color: "#000",
+                  border: "none",
+                  padding: "0.4rem 0.6rem",
+                  borderRadius: "5px",
+                  cursor: "pointer",
+                }}
+              >
+                {selected ? "Remove" : "Add"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+// ---------------------------------------------------------
+// Styles
+// ---------------------------------------------------------
+const card = {
+  background: "#0a0a0a",
+  border: "1px solid #0ff",
+  borderRadius: "10px",
+  padding: "1rem",
+  color: "#0ff",
+} as const;
+
+const marketBox = {
+  border: "1px solid #333",
+  padding: "0.6rem",
+  marginBottom: "0.6rem",
+  borderRadius: "6px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  background: "#111",
+} as const;
