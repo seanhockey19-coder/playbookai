@@ -14,12 +14,21 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "types": ["node", "react"]
+    "types": ["node", "react"],
+
+    /* ⭐ ADD THESE TWO LINES ⭐ */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["*"]
+    }
+    /* ⭐ END OF FIX ⭐ */
   },
+
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx"
   ],
+
   "exclude": ["node_modules"]
 }
