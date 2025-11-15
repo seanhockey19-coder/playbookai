@@ -1,5 +1,6 @@
 "use client";
 
+import PropBookPanel from "./components/PropBookPanel";
 import LineValueCard from "./components/LineValueCard";
 import { useEffect, useState } from "react";
 import GameSelector from "./components/GameSelector";
