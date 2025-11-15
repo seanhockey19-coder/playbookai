@@ -1,33 +1,9 @@
-// ============================================================
-//  Action Network Player Props Scraper
-//  Fully Fixed + Safe + Typed + Ready for Production
-// ============================================================
-
-export const runtime = "nodejs"; // Cheerio requires NodeJS runtime
+export const runtime = "edge";
 
 import { NextResponse } from "next/server";
-import * as cheerio from "cheerio";
 
 // ------------------------------------------------------------
-//  Types
-// ------------------------------------------------------------
-interface ScrapedProp {
-  category: string;
-  propName: string;
-  line: string;
-  over: string | null;
-  under: string | null;
-  book: string;
-  source: string;
-}
-
-interface ScrapedPlayerProps {
-  player: string;
-  props: ScrapedProp[];
-}
-
-// ------------------------------------------------------------
-//  GET /api/props-scraped?player=Mahomes
+//  GET /api/props-scraped?player=Patrick Mahomes
 // ------------------------------------------------------------
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -41,101 +17,62 @@ export async function GET(req: Request) {
   }
 
   try {
-    const encoded = encodeURIComponent(playerName);
-
-    // Search page URL
-    const searchURL = `https://www.actionnetwork.com/search?q=${encoded}`;
-
-    const searchHTML = await fetch(searchURL).then((res) => res.text());
-    const $search = cheerio.load(searchHTML);
-
     // ------------------------------------------------------------
-    //  Find the player's page link
+    // 1) Search for player to get Action Network player ID
     // ------------------------------------------------------------
-    let playerLink: string | null = null;
+    const searchURL = `https://api.actionnetwork.com/web/v1/search/player?q=${encodeURIComponent(
+      playerName
+    )}`;
 
-    $search("a[href*='/player/']").each((_, el) => {
-      const href = $search(el).attr("href") || "";
-      if (href.includes("/player/")) {
-        playerLink = "https://www.actionnetwork.com" + href;
-        return false; // break
-      }
-    });
+    const searchRes = await fetch(searchURL);
+    const searchJson = await searchRes.json();
 
-    if (!playerLink) {
+    const record = searchJson.records?.find(
+      (r: any) => r.entity_type === "PLAYER"
+    );
+
+    if (!record) {
       return NextResponse.json({
         player: playerName,
         props: [],
-        note: "Player not found on Action Network",
+        note: "Player not found on Action Network search API",
       });
     }
 
-    // ------------------------------------------------------------
-    //  Fetch player's actual props page
-    // ------------------------------------------------------------
-    const playerHTML = await fetch(playerLink).then((res) => res.text());
-    const $ = cheerio.load(playerHTML);
-
-    const props: ScrapedProp[] = [];
+    const playerId = record.entity_id;
 
     // ------------------------------------------------------------
-    //  Scrape all props tables
+    // 2) Fetch player props from Action Network props endpoint
     // ------------------------------------------------------------
-    $("table, .props-table").each((_, table) => {
-      const category =
-        $(table).find("thead th").first().text().trim() || "Unknown";
+    const propsURL = `https://api.actionnetwork.com/web/v1/player/${playerId}/props`;
 
-      $(table)
-        .find("tbody tr")
-        .each((_, row) => {
-          const cells = $(row).find("td");
+    const propsRes = await fetch(propsURL);
+    const propsJson = await propsRes.json();
 
-          if (cells.length < 2) return;
+    // Format props
+    const props = (propsJson || []).map((p: any) => ({
+      category: p.category || "Unknown",
+      propName: p.label || p.market || "Stat",
+      line: p.projection?.toString() || "",
+      over: p.over?.toString() || null,
+      under: p.under?.toString() || null,
+      book: "Action Network API",
+      source: "action-network-api",
+    }));
 
-          const propName = $(cells[0]).text().trim();
-          const line = $(cells[1]).text().trim();
-
-          const oddsCell = $(cells[2]).text().trim() || "";
-
-          const over = oddsCell.includes("Over")
-            ? oddsCell.replace("Over", "").trim()
-            : null;
-
-          const under = oddsCell.includes("Under")
-            ? oddsCell.replace("Under", "").trim()
-            : null;
-
-          if (propName && line) {
-            props.push({
-              category,
-              propName,
-              line,
-              over,
-              under,
-              book: "Action Network (scraped)",
-              source: "action-network",
-            });
-          }
-        });
-    });
-
-    // ------------------------------------------------------------
-    //  Return final JSON
-    // ------------------------------------------------------------
     return NextResponse.json({
-      player: playerName,
+      player: record.full_name,
+      playerId,
       props,
-      scrapedFrom: playerLink,
       count: props.length,
     });
   } catch (err) {
-    console.error("SCRAPER ERROR:", err);
+    console.error("ACTION NETWORK API ERROR:", err);
     return NextResponse.json(
       {
         player: playerName,
         props: [],
-        error: "Scraper failed — Action Network layout likely changed.",
-        fallback: true,
+        error: "Failed to fetch props from Action Network API",
       },
       { status: 500 }
     );
