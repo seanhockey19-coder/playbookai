@@ -110,6 +110,9 @@ export default function DashboardPage() {
       />
 
       {/* GRID LAYOUT */}
+      
+      <GameBreakdown game={selectedGame} />
+
       <div
         style={{
           display: "grid",
