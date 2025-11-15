@@ -1,5 +1,6 @@
 "use client";
 
+import PropViewer from "./components/PropViewer";
 import { useEffect, useState } from "react";
 import GameSelector from "./components/GameSelector";
 import PlayerSelector from "./components/PlayerSelector";
@@ -114,6 +115,7 @@ export default function DashboardPage() {
           gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
           gap: "1.5rem",
           marginTop: "2rem",
+          <PropViewer />
         }}
       >
         {/* Odds for selected game */}
