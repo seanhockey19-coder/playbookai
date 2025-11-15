@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import GameBreakdown from "./components/GameBreakdown";
 import GameSelector from "./components/GameSelector";
 import PlayerSelector from "./components/PlayerSelector";
 import OddsCard from "./components/OddsCard";
