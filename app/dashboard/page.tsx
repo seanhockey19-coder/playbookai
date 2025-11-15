@@ -1,59 +1,73 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import GameBreakdown from "./components/GameBreakdown";
+
 import GameSelector from "./components/GameSelector";
-import PlayerSelector from "./components/PlayerSelector";
 import OddsCard from "./components/OddsCard";
 import PropsCard from "./components/PropsCard";
+import PlayerSelector from "./components/PlayerSelector";
+import LadderCard from "./components/LadderCard";
 import ParlayBuilder from "./components/ParlayBuilder";
+import GameBreakdown from "./components/GameBreakdown";
 import LadderGenerator from "./components/LadderGenerator";
 
 import type { SimplifiedGame } from "../api/nfl/odds/route";
 
 export default function DashboardPage() {
+  // ============================
+  // SPORT TOGGLE (NFL / NBA)
+  // ============================
+  const [sport, setSport] = useState<"nfl" | "nba">("nfl");
+
+  // ============================
+  // GAME STATE
+  // ============================
   const [games, setGames] = useState<SimplifiedGame[]>([]);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ---------------------------------------------------------
-  // Load LIVE NFL Odds
-  // ---------------------------------------------------------
+  // ============================
+  // LOAD ODDS (NFL or NBA)
+  // ============================
   useEffect(() => {
     const fetchOdds = async () => {
       try {
         setLoading(true);
+        setError(null);
 
-        const res = await fetch("/api/nfl/odds");
-        const json = await res.json();
+        const url =
+          sport === "nfl" ? "/api/nfl/odds" : "/api/nba/odds";
+
+        const res = await fetch(url);
 
         if (!res.ok) {
-          throw new Error(json.error || "Failed to load odds");
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || "Failed to fetch odds");
         }
 
+        const json = await res.json();
         const events: SimplifiedGame[] = json.events || [];
-        setGames(events);
 
-        if (events.length > 0) {
-          setSelectedGameId(events[0].id);
-        }
+        setGames(events);
+        setSelectedGameId(events[0]?.id || null);
       } catch (err: any) {
         setError(err.message || "Unknown error");
+        setGames([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchOdds();
-  }, []);
+  }, [sport]);
 
   const selectedGame =
-    games.find((g) => g.id === selectedGameId) || games[0] || undefined;
+    games.find((g) => g.id === selectedGameId) || games[0];
 
-  // ---------------------------------------------------------
-  // Load LIVE Player Props (from our props API)
-  // ---------------------------------------------------------
+  // ============================
+  // LOAD PLAYER PROPS (IF AVAILABLE)
+  // ============================
   const [propsData, setPropsData] = useState<any[]>([]);
   const [propsLoading, setPropsLoading] = useState(false);
 
@@ -71,7 +85,6 @@ export default function DashboardPage() {
 
         const res = await fetch(`/api/nfl/props?${q}`);
         const json = await res.json();
-
         setPropsData(json.props || []);
       } catch (err) {
         setPropsData([]);
@@ -83,62 +96,93 @@ export default function DashboardPage() {
     loadProps();
   }, [selectedGameId, selectedGame?.homeTeam, selectedGame?.awayTeam]);
 
-  // ---------------------------------------------------------
-  // UI Rendering
-  // ---------------------------------------------------------
+  // ================================================================
+  // RENDER
+  // ================================================================
   return (
-    <div style={{ paddingBottom: "4rem" }}>
-      <h1
-        style={{
-          fontSize: "2rem",
-          color: "#0ff",
-          marginBottom: "1.5rem",
-          fontWeight: "bold",
-        }}
-      >
-        Dashboard
+    <div style={{ padding: "2rem", color: "#fff" }}>
+      <h1 style={{ fontSize: "2rem", color: "#0ff", marginBottom: "1.5rem" }}>
+        Dashboard ({sport.toUpperCase()})
       </h1>
 
-      {loading && <p>Loading live odds…</p>}
-      {error && <p style={{ color: "salmon" }}>Could not load odds: {error}</p>}
+      {/* SPORT TOGGLE */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        <button
+          onClick={() => setSport("nfl")}
+          style={{
+            padding: "8px 16px",
+            background: sport === "nfl" ? "#0ff" : "#222",
+            color: sport === "nfl" ? "#000" : "#ccc",
+            border: "1px solid #333",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
+        >
+          NFL
+        </button>
 
-      {/* Game Selector */}
+        <button
+          onClick={() => setSport("nba")}
+          style={{
+            padding: "8px 16px",
+            background: sport === "nba" ? "#0ff" : "#222",
+            color: sport === "nba" ? "#000" : "#ccc",
+            border: "1px solid #333",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
+        >
+          NBA
+        </button>
+      </div>
+
+      {/* LOADING / ERROR */}
+      {loading && <p style={{ color: "#999" }}>Loading live odds…</p>}
+      {error && <p style={{ color: "salmon" }}>Error: {error}</p>}
+
+      {/* GAME SELECTOR */}
       <GameSelector
         games={games}
         selectedGameId={selectedGameId}
         onChange={setSelectedGameId}
       />
 
-      {/* GRID LAYOUT */}
-      
+      {/* ===================== */}
+      {/*   AI GAME BREAKDOWN   */}
+      {/* ===================== */}
       <GameBreakdown game={selectedGame} />
 
+      {/* ===================== */}
+      {/*     GRID LAYOUT       */}
+      {/* ===================== */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
           gap: "1.5rem",
-          marginTop: "2rem",
+          marginTop: "1.5rem",
         }}
       >
-        {/* Team Odds */}
+        {/* Odds Card */}
         <OddsCard game={selectedGame} />
 
-        {/* Live Props from Odds API (TEAM props) */}
+        {/* Props (NFL only for now) */}
         <PropsCard
           game={selectedGame}
           propsData={propsData}
           loading={propsLoading}
         />
 
-       {/* Game + Player Props Parlay Builder */}
+        {/* Ladder (props-based) */}
+        <LadderCard propsData={propsData} />
+
+        {/* SGP / Parlay Builder */}
         <ParlayBuilder game={selectedGame} />
 
-        {/* NEW: Player Prop Ladder Generator */}
-        <LadderGenerator />
-
-        {/* Player Selector – optional future expansion */}
+        {/* Optional future tools */}
         <PlayerSelector />
+
+        <LadderGenerator />
       </div>
     </div>
   );
