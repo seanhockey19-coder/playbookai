@@ -1,72 +1,45 @@
-export function generateBestSGP(game) {
-  if (!game) return [];
+// ============================================================
+//  AI SGP Engine — Simplified Value-Based Combo Picker
+// ============================================================
 
-  const impliedProb = (odds) => {
-    if (odds < 0) return Math.abs(odds) / (Math.abs(odds) + 100);
-    return 100 / (odds + 100);
-  };
+// This is the shared type used between ParlayBuilder + SGP Button
+export interface MarketOption {
+  id: string;
+  label: string;
+  odds: number;
+  type: string;
+  valueScore: number;
+}
 
-  const valueScore = (prob, juice) => {
-    const efficiency = prob - impliedProb(juice);
-    return Math.max(0, Math.min(100, Math.round(efficiency * 250 + 50)));
-  };
+// ------------------------------------------------------------
+//  chooseBestSGP — returns the strongest 2–3 leg combo
+// ------------------------------------------------------------
+export function chooseBestSGP(options: MarketOption[]): MarketOption[] {
+  if (!options || options.length === 0) return [];
 
-  const ml = game.h2h?.outcomes || [];
-  const spreads = game.spreads?.outcomes || [];
-  const totals = game.totals?.outcomes || [];
+  // 1) Sort highest → lowest value score
+  const sorted = [...options].sort(
+    (a, b) => b.valueScore - a.valueScore
+  );
 
-  const candidates = [];
+  // 2) Always pick the best 2 legs
+  const top2 = sorted.slice(0, 2);
 
-  ml.forEach((o) => {
-    const prob = impliedProb(o.price);
-    candidates.push({
-      label: `${o.name} ML`,
-      odds: o.price,
-      prob,
-      value: valueScore(prob, o.price),
-      category: "moneyline",
-    });
-  });
+  // 3) Sometimes add a 3rd leg if value score is high enough
+  const third = sorted[2];
+  if (third && third.valueScore >= 6.5) {
+    return [...top2, third];
+  }
 
-  spreads.forEach((o) => {
-    const point = o.point ?? 0;
-    const formatted = o.point == null ? "PK" : `${point > 0 ? "+" : ""}${point}`;
-    const prob = impliedProb(o.price);
+  return top2;
+}
 
-    candidates.push({
-      label: `${o.name} ${formatted}`,
-      odds: o.price,
-      prob,
-      value: valueScore(prob, o.price),
-      category: "spread",
-    });
-  });
-
-  totals.forEach((o) => {
-    const prob = impliedProb(o.price);
-    candidates.push({
-      label: `${o.name} ${o.point}`,
-      odds: o.price,
-      prob,
-      value: valueScore(prob, o.price),
-      category: "total",
-    });
-  });
-
-  const sorted = candidates
-    .map((c) => ({ ...c, score: c.value + c.prob * 100 }))
-    .sort((a, b) => b.score - a.score);
-
-  const top = sorted.slice(0, 5);
-
-  const hasFavorite = top.find((c) => c.category === "moneyline");
-  const hasSpread = top.find((c) => c.category === "spread");
-  const hasTotal = top.find((c) => c.category === "total");
-
-  const build = [];
-  if (hasFavorite) build.push(hasFavorite);
-  if (hasSpread && build.length < 2) build.push(hasSpread);
-  if (hasTotal && build.length < 3) build.push(hasTotal);
-
-  return build.slice(0, 3);
+// ------------------------------------------------------------
+//  (Optional) future advanced model hooks
+// ------------------------------------------------------------
+export function scoreCombo(combo: MarketOption[]): number {
+  // Placeholder AI scoring — expand later
+  let score = 0;
+  combo.forEach((c) => (score += c.valueScore));
+  return score;
 }
