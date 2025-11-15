@@ -128,8 +128,8 @@ export default function DashboardPage() {
           loading={propsLoading}
         />
 
-        {/* Parlay Builder */}
-        <ParlayBuilder game={selectedGame} />
+       {/* Game + Player Props Parlay Builder */}
+<ParlayBuilder game={selectedGame} propsData={propsData} />
 
         {/* NEW: Player Prop Ladder Generator */}
         <LadderGenerator />
