@@ -1,39 +1,65 @@
 "use client";
 
+import { chooseBestSGP } from "@/lib/sgpEngine";
 import { useState } from "react";
-import { generateBestSGP } from "@/lib/sgpEngine";
 
-export default function BestSGPButton({ game, onGenerate }) {
-  const [loading, setLoading] = useState(false);
+interface MarketOption {
+  id: string;
+  label: string;
+  odds: number;
+  type: string;
+  valueScore: number;
+}
 
-  const handleGenerate = () => {
-    if (!game) return;
-    setLoading(true);
+interface Props {
+  selected: MarketOption[];
+}
 
-    const result = generateBestSGP(game);
+export default function BestSGPButton({ selected }: Props) {
+  const [result, setResult] = useState<string | null>(null);
 
-    setTimeout(() => {
-      onGenerate(result);
-      setLoading(false);
-    }, 300);
+  const generateSGP = () => {
+    if (selected.length < 2) {
+      setResult("Select at least 2 picks.");
+      return;
+    }
+
+    const best = chooseBestSGP(selected);
+    setResult(
+      `Best SGP Selected: ${best.map((x) => x.label).join(" + ")}`
+    );
   };
 
   return (
-    <button
-      onClick={handleGenerate}
-      style={{
-        padding: "12px 16px",
-        background: "#0ff",
-        color: "#000",
-        border: "none",
-        borderRadius: "6px",
-        cursor: "pointer",
-        fontWeight: "bold",
-        width: "100%",
-        marginBottom: "12px",
-      }}
-    >
-      {loading ? "Generating SGP…" : "🔥 Best SGP Combo"}
-    </button>
+    <div style={{ marginTop: 20 }}>
+      <button
+        onClick={generateSGP}
+        style={{
+          width: "100%",
+          padding: 10,
+          background: "#0088ff",
+          border: "none",
+          borderRadius: 6,
+          fontWeight: "bold",
+          cursor: "pointer",
+        }}
+      >
+        AI: Generate Best SGP
+      </button>
+
+      {result && (
+        <div
+          style={{
+            marginTop: 10,
+            background: "#111",
+            padding: 10,
+            borderRadius: 6,
+            color: "#0ff",
+          }}
+        >
+          {result}
+        </div>
+      )}
+    </div>
   );
 }
