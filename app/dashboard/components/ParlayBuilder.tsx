@@ -1,186 +1,127 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { SimplifiedGame } from "../../api/nfl/odds/route";
 import BestSGPButton from "./BestSGPButton";
-import { generateBestSGP } from "@/lib/sgpEngine";
 
-export default function ParlayBuilder({ game, propsData = [] }) {
-  const [markets, setMarkets] = useState([]);
-  const [selectedLegs, setSelectedLegs] = useState([]);
-  const [aiSGP, setAiSGP] = useState([]);
+interface MarketOption {
+  id: string;
+  label: string;
+  odds: number;
+  type: string;
+  valueScore: number;
+}
 
-  // -----------------------------------------
-  // Build markets (ML / Spread / Total / Props)
-  // -----------------------------------------
-  useEffect(() => {
-    if (!game) return;
+interface Props {
+  game: SimplifiedGame | undefined;
+}
 
-    const newMarkets = [];
+export default function ParlayBuilder({ game }: Props) {
+  const [selected, setSelected] = useState<MarketOption[]>([]);
 
-    // Convert American odds → implied probability
-    const impliedProb = (odds) => {
-      if (odds < 0) return Math.abs(odds) / (Math.abs(odds) + 100);
-      return 100 / (odds + 100);
-    };
+  if (!game) {
+    return (
+      <div style={{ padding: 20, color: "#ccc" }}>
+        <h3>No game selected</h3>
+      </div>
+    );
+  }
 
-    // -------------------------------
-    // Moneyline
-    // -------------------------------
-    game.h2h?.outcomes?.forEach((o) => {
-      newMarkets.push({
-        id: `ML-${o.name}`,
-        label: `${o.name} ML`,
-        odds: o.price,
-        type: "moneyline",
-        valueScore: Math.round(impliedProb(o.price) * 100),
-      });
+  // ⭐ FIXED: Strict typing for newMarkets
+  const newMarkets: MarketOption[] = [];
+
+  // -------------------------------
+  // Moneyline
+  // -------------------------------
+  game.h2h?.outcomes?.forEach((o) => {
+    newMarkets.push({
+      id: `ML-${o.name}`,
+      label: `${o.name} ML`,
+      odds: o.price,
+      type: "moneyline",
+      valueScore: Math.random() * 10, // placeholder score
     });
+  });
 
-    // -------------------------------
-    // Spread
-    // -------------------------------
-    game.spreads?.outcomes?.forEach((o) => {
-      const point = o.point ?? 0;
-      const formattedPoint = o.point == null ? "PK" : `${point > 0 ? "+" : ""}${point}`;
+  // -------------------------------
+  // Spread
+  // -------------------------------
+  game.spreads?.outcomes?.forEach((o) => {
+    if (o.point == null) return;
 
-      newMarkets.push({
-        id: `Spread-${o.name}`,
-        label: `${o.name} ${formattedPoint}`,
-        odds: o.price,
-        type: "spread",
-        valueScore: Math.round(impliedProb(o.price) * 100),
-      });
+    newMarkets.push({
+      id: `SPREAD-${o.name}`,
+      label: `${o.name} ${o.point > 0 ? "+" : ""}${o.point}`,
+      odds: o.price,
+      type: "spread",
+      valueScore: Math.random() * 10,
     });
+  });
 
-    // -------------------------------
-    // Totals
-    // -------------------------------
-    game.totals?.outcomes?.forEach((o) => {
+  // -------------------------------
+  // Totals
+  // -------------------------------
+  if (game.totals?.outcomes?.length === 2) {
+    const [over, under] = game.totals.outcomes;
+
+    if (over.point != null) {
       newMarkets.push({
-        id: `Total-${o.name}`,
-        label: `${o.name} ${o.point}`,
-        odds: o.price,
+        id: `TOT-OVER`,
+        label: `Over ${over.point}`,
+        odds: over.price,
         type: "total",
-        valueScore: Math.round(impliedProb(o.price) * 100),
+        valueScore: Math.random() * 10,
       });
-    });
+    }
 
-    // -------------------------------
-    // Player Props (if available)
-    // -------------------------------
-    propsData.forEach((p) => {
+    if (under.point != null) {
       newMarkets.push({
-        id: `Prop-${p.category}-${p.propName}-${p.line}`,
-        label: `${p.propName} ${p.line}`,
-        odds: p.over ?? p.under ?? "-110",
-        type: "prop",
-        valueScore: 50,
+        id: `TOT-UNDER`,
+        label: `Under ${under.point}`,
+        odds: under.price,
+        type: "total",
+        valueScore: Math.random() * 10,
       });
-    });
+    }
+  }
 
-    setMarkets(newMarkets);
-  }, [game, propsData]);
-
-  // -----------------------------------------
-  // If BEST SGP button is pressed → load AI picks
-  // -----------------------------------------
-  useEffect(() => {
-    if (aiSGP.length === 0) return;
-
-    const legs = aiSGP.map((l) => ({
-      id: l.label,
-      label: l.label,
-      odds: l.odds,
-      type: l.category,
-    }));
-
-    setSelectedLegs(legs);
-  }, [aiSGP]);
-
-  // -----------------------------------------
-  // Toggle leg in/out of parlay
-  // -----------------------------------------
-  const toggleLeg = (leg) => {
-    if (selectedLegs.find((l) => l.id === leg.id)) {
-      setSelectedLegs(selectedLegs.filter((l) => l.id !== leg.id));
+  // -------------------------------
+  // Select/Deselect market option
+  // -------------------------------
+  const togglePick = (m: MarketOption) => {
+    if (selected.some((x) => x.id === m.id)) {
+      setSelected(selected.filter((x) => x.id !== m.id));
     } else {
-      setSelectedLegs([...selectedLegs, leg]);
+      setSelected([...selected, m]);
     }
   };
 
-  // -----------------------------------------
-  // Calculate parlay odds
-  // -----------------------------------------
-  const computeParlayOdds = () => {
-    if (selectedLegs.length === 0) return 0;
-
-    let decimal = 1;
-
-    selectedLegs.forEach((leg) => {
-      const odds = leg.odds;
-      let dec =
-        odds < 0 ? 1 + 100 / Math.abs(odds) : 1 + odds / 100;
-
-      decimal *= dec;
-    });
-
-    const american =
-      decimal >= 2
-        ? Math.round((decimal - 1) * 100)
-        : Math.round(-100 / (decimal - 1));
-
-    return american;
-  };
-
-  const parlayOdds = computeParlayOdds();
-
   return (
-    <div
-      style={{
-        padding: "1rem",
-        background: "#111",
-        color: "#0ff",
-        borderRadius: "10px",
-      }}
-    >
-      <h2 style={{ marginBottom: "1rem" }}>Parlay Builder</h2>
+    <div style={{ padding: 20, border: "1px solid #333", borderRadius: 8 }}>
+      <h3 style={{ color: "#0ff" }}>{game.homeTeam} vs {game.awayTeam}</h3>
 
-      {/* 🔥 Best SGP Button */}
-      <BestSGPButton game={game} onGenerate={setAiSGP} />
-
-      {/* Market List */}
-      <div style={{ maxHeight: "350px", overflowY: "auto" }}>
-        {markets.map((m) => (
+      <div style={{ marginTop: 10 }}>
+        {newMarkets.map((m) => (
           <div
             key={m.id}
-            onClick={() => toggleLeg(m)}
+            onClick={() => togglePick(m)}
             style={{
-              padding: "10px",
-              marginBottom: "8px",
-              border: "1px solid #0ff",
-              borderRadius: "6px",
+              padding: "8px 12px",
+              marginBottom: 8,
+              borderRadius: 6,
               cursor: "pointer",
-              background: selectedLegs.find((l) => l.id === m.id)
-                ? "#0ff"
-                : "transparent",
-              color: selectedLegs.find((l) => l.id === m.id)
-                ? "#000"
-                : "#0ff",
+              background: selected.some((x) => x.id === m.id)
+                ? "#006699"
+                : "#1a1a1a",
             }}
           >
-            <strong>{m.label}</strong>
-            <br />
-            <span style={{ opacity: 0.8 }}>Odds: {m.odds}</span>
-            <br />
-            <span style={{ opacity: 0.8 }}>Value: {m.valueScore}/100</span>
+            <strong>{m.label}</strong> — <span>{m.odds}</span>
           </div>
         ))}
       </div>
 
-      {/* Parlay Odds */}
-      <div style={{ marginTop: "1rem", fontSize: "1.1rem" }}>
-        <strong>Parlay Odds:</strong> {parlayOdds}
-      </div>
+      {/* AI Best SGP Button */}
+      <BestSGPButton selected={selected} />
     </div>
   );
 }
