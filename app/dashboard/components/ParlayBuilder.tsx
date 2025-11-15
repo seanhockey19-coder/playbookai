@@ -22,10 +22,10 @@ function impliedProb(odds: number) {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 }
 
-// Value Score (0–100)
+// Value Score (0–100 simple model)
 function computeValueScore(odds: number) {
-  const imp = impliedProb(odds);
-  return Math.round((imp * 100 + (1 - imp) * 40) / 2); // simple balanced value model
+  const imp = impliedProb(odds); // 0–1
+  return Math.round((imp * 100 + (1 - imp) * 40) / 2);
 }
 
 interface Props {
@@ -37,7 +37,7 @@ export default function ParlayBuilder({ game }: Props) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Reset whenever user switches to another game
+    // Reset legs when switching games
     setLegs([]);
   }, [game?.id]);
 
@@ -55,7 +55,7 @@ export default function ParlayBuilder({ game }: Props) {
   // ---------------------------------------------------------
   const markets: any[] = [];
 
-  // Moneyline (h2h)
+  // MONEYLINE
   if (game.h2h?.outcomes) {
     game.h2h.outcomes.forEach((o) => {
       markets.push({
@@ -68,35 +68,42 @@ export default function ParlayBuilder({ game }: Props) {
     });
   }
 
-  // Spread
+  // SPREADS — with PK fallback
   if (game.spreads?.outcomes) {
     game.spreads.outcomes.forEach((o) => {
+      const point = o.point ?? 0;
+
+      const formattedPoint =
+        o.point == null ? "PK" : `${point > 0 ? "+" : ""}${point}`;
+
       markets.push({
-        id: `SPread-${o.name}`,
-        label: `${o.name} ${o.point > 0 ? "+" : ""}${o.point}`,
+        id: `Spread-${o.name}`,
+        label: `${o.name} ${formattedPoint}`,
         odds: o.price,
         type: "spread",
         team: o.name,
-        point: o.point,
+        point,
       });
     });
   }
 
-  // Totals
+  // TOTALS
   if (game.totals?.outcomes) {
+    const totalPoint = game.totals.outcomes[0]?.point ?? "N/A";
+
     game.totals.outcomes.forEach((o) => {
       markets.push({
         id: `Total-${o.name}`,
-        label: `Total ${o.name} ${game.totals.outcomes[0].point}`,
+        label: `Total ${o.name} ${totalPoint}`,
         odds: o.price,
         type: "total",
-        point: game.totals.outcomes[0].point,
+        point: totalPoint,
       });
     });
   }
 
   // ---------------------------------------------------------
-  // Toggle leg selection
+  // Toggle Leg
   // ---------------------------------------------------------
   const toggleLeg = (m: any) => {
     const exists = legs.find((l) => l.id === m.id);
@@ -120,6 +127,7 @@ export default function ParlayBuilder({ game }: Props) {
   return (
     <div style={card}>
       <h2>Single-Game Parlay Builder</h2>
+
       <p style={{ marginBottom: "0.6rem", opacity: 0.8 }}>
         {game.awayTeam} @ {game.homeTeam}
       </p>
@@ -136,12 +144,11 @@ export default function ParlayBuilder({ game }: Props) {
         </div>
       )}
 
-      {/* Market List */}
+      {/* ALL MARKETS LIST */}
       <div style={{ maxHeight: "260px", overflowY: "auto" }}>
         {markets.map((m) => {
           const selected = legs.some((l) => l.id === m.id);
-
-          const valScore = computeValueScore(m.odds);
+          const valueScore = computeValueScore(m.odds);
 
           return (
             <div key={m.id} style={marketBox}>
@@ -150,7 +157,7 @@ export default function ParlayBuilder({ game }: Props) {
                 <br />
                 Odds: <span style={{ color: "#0ff" }}>{m.odds}</span>
                 <br />
-                Value Score: <span>{valScore}/100</span>
+                Value Score: {valueScore}/100
               </div>
 
               <button
